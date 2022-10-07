@@ -1,0 +1,377 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r Libraries}
+library(ggplot2)
+library(tidyr)
+library(Rsolnp)
+```
+
+```{r Import data}
+#import data
+fullData <- read.csv("data.csv")
+
+# Model variables:
+
+# subject - Subject ID, 1-56
+# time - Session number, 1 or 2
+# rN - Number ratio
+# rTSA - Surface area ratio
+# rCH - Convex hull ratio
+# l - Does correct response for number (yellow or blue) agree with the correct response for the target feature? (1 = yes, 0 = no)
+# i - Does correct response for surface area (yellow or blue) agree with the correct response for the target feature? (1 = yes, 0 = no)
+# j - Does correct response for convex hull (yellow or blue) agree with the correct response for the target feature? (1 = yes, 0 = no)
+# taskN - Is this trial from the number task? (1 = yes, 0 = no)
+# taskTSA - Is this trial from the surface area task? (1 = yes, 0 = no)
+# taskCH - Is this trial from the convex hull task? (1 = yes, 0 = no)
+# correct - Accuracy (1 = responded correctly, 0 = responded incorrectly)
+
+
+# Extra variables (used to derive the above variables, or for additional analyses/data trimming):
+
+# RT - Response time
+# cresp - Correct response (1 = yellow, 0 = blue)
+# imageN - image ID number (1-215)
+# largerN - Which group (yellow or blue) has a larger number of dots?
+# largerTSA - Which group (yellow or blue) has a larger surface area?
+# largerCH - Which group (yellow or blue) has a larger convex hull?
+# blueN - # blue dots
+# yellowN - # yellow dots
+# blueTSA - Blue surface area
+# yellowTSA - Yellow surface area
+# blueCH - Blue convex hull
+# yellowCH - Yellow convex hull
+```
+
+```{r Trim data by RT and accuracy}
+#Remove RT outliers
+trimmed <- data.frame()
+fullData$RToutlier <- 99
+avgRT <- data.frame()
+for (subj in unique(fullData$subject)){
+  thisSubj <- subset(fullData,subject==subj)
+  nMRT <- mean(thisSubj$RT[thisSubj$taskN == 1 ])
+  nSDRT <- sd(thisSubj$RT[thisSubj$taskN == 1 ])
+  minN <- nMRT - 3*nSDRT
+  maxN <- nMRT + 3*nSDRT
+
+  tsaMRT <- mean(thisSubj$RT[thisSubj$taskTSA == 1 ])
+  tsaSDRT <- sd(thisSubj$RT[thisSubj$taskTSA == 1 ])
+  minTSA <- tsaMRT - 3*tsaSDRT
+  maxTSA <- tsaMRT + 3*tsaSDRT
+
+  chMRT <- mean(thisSubj$RT[thisSubj$taskCH == 1 ])
+  chSDRT <- sd(thisSubj$RT[thisSubj$taskCH == 1 ])
+  minCH <- chMRT - 3*chSDRT
+  maxCH <- chMRT + 3*chSDRT
+
+  for (i in 1:nrow(thisSubj)){
+    thisRT <- thisSubj$RT[i]
+    if (thisSubj$taskN[i] == 1){
+      if (thisRT > maxN | thisRT < minN){
+        thisSubj$RToutlier[i] <- 1
+      } else {
+        thisSubj$RToutlier[i] <- 0
+      }
+    }
+
+    if (thisSubj$taskTSA[i] == 1){
+      if (thisRT > maxTSA | thisRT < minTSA){
+        thisSubj$RToutlier[i] <- 1
+      } else {
+        thisSubj$RToutlier[i] <- 0
+      }
+    }
+
+    if (thisSubj$taskCH[i] == 1){
+      if (thisRT > maxCH | thisRT < minCH){
+        thisSubj$RToutlier[i] <- 1
+      } else {
+        thisSubj$RToutlier[i] <- 0
+      }
+    }
+  }
+  trimmed <- rbind(trimmed, thisSubj)
+}
+trimmed2 <- subset(trimmed, RToutlier == 0)
+
+
+
+
+#Remove accuracy outliers
+#calculate average accuracy
+avgAccLong <- data.frame()
+for (sub in unique(trimmed2$subject)){
+  thisSubj <- trimmed2[trimmed2$subject==sub,]
+  accN1 <- mean(thisSubj$correct[thisSubj$time==1 & thisSubj$taskN == 1])
+  accN2 <- mean(thisSubj$correct[thisSubj$time==2 & thisSubj$taskN == 1])
+  
+  accTSA1 <- mean(thisSubj$correct[thisSubj$time==1 & thisSubj$taskTSA == 1])
+  accTSA2 <- mean(thisSubj$correct[thisSubj$time==2 & thisSubj$taskTSA == 1])
+  
+  accCH1 <- mean(thisSubj$correct[thisSubj$time==1 & thisSubj$taskCH == 1])
+  accCH2 <- mean(thisSubj$correct[thisSubj$time==2 & thisSubj$taskCH == 1])
+  sub <- rep(sub,3)
+  task <- c("N", "TSA", "CH")
+  t1 <- c(accN1,accTSA1,accCH1)
+  t2 <- c(accN2, accTSA2, accCH2)
+  thisDat <- data.frame(sub,task,t1,t2)
+
+  avgAccLong <- rbind(avgAccLong, thisDat)
+}
+
+avgAcc.c <- avgAccLong[complete.cases(avgAccLong),]
+
+#remove outliers
+mN1 <- mean(avgAcc.c$t1[avgAcc.c$task=='N'])
+sdN1 <- sd(avgAcc.c$t1[avgAcc.c$task=='N'])
+minN1 <- mN1-3*sdN1
+
+mTSA1 <- mean(avgAcc.c$t1[avgAcc.c$task=='TSA'])
+sdTSA1 <- sd(avgAcc.c$t1[avgAcc.c$task=='TSA'])
+minTSA1 <- mTSA1-3*sdTSA1
+
+mCH1 <- mean(avgAcc.c$t1[avgAcc.c$task=='CH'])
+sdCH1 <- sd(avgAcc.c$t1[avgAcc.c$task=='CH'])
+minCH1 <- mCH1-3*sdCH1
+
+mN2 <- mean(avgAcc.c$t2[avgAcc.c$task=='N'])
+sdN2 <- sd(avgAcc.c$t2[avgAcc.c$task=='N'])
+minN2 <- mN2-3*sdN2
+
+mTSA2 <- mean(avgAcc.c$t2[avgAcc.c$task=='TSA'])
+sdTSA2 <- sd(avgAcc.c$t2[avgAcc.c$task=='TSA'])
+minTSA2 <- mTSA2-3*sdTSA2
+
+mCH2 <- mean(avgAcc.c$t2[avgAcc.c$task=='CH'])
+sdCH2 <- sd(avgAcc.c$t2[avgAcc.c$task=='CH'])
+minCH2 <- mCH2-3*sdCH2
+
+outliers <- data.frame()
+for (subj in unique(avgAcc.c$sub)){
+  if (avgAcc.c$t1[avgAcc.c$task=="N" & avgAcc.c$sub==subj] < minN1){
+    outliers <- rbind(outliers, data.frame(subj, task="N1"))
+  }
+  else if (avgAcc.c$t1[avgAcc.c$task=="TSA" & avgAcc.c$sub==subj] < minTSA1){
+    outliers <- rbind(outliers, data.frame(subj, task="TSA1"))
+  }
+  else if (avgAcc.c$t1[avgAcc.c$task=="CH" & avgAcc.c$sub==subj] < minCH1){
+    outliers <- rbind(outliers, data.frame(subj, task="CH1"))
+  }
+  
+  else if (avgAcc.c$t2[avgAcc.c$task=="N" & avgAcc.c$sub==subj] < minN2){
+    outliers <- rbind(outliers, data.frame(subj, task="N2"))
+  }
+  else if (avgAcc.c$t2[avgAcc.c$task=="TSA" & avgAcc.c$sub==subj] < minTSA2){
+    outliers <- rbind(outliers, data.frame(subj, task="TSA2"))
+  }
+  else if (avgAcc.c$t2[avgAcc.c$task=="CH" & avgAcc.c$sub==subj] < minCH2){
+    outliers <- rbind(outliers, data.frame(subj, task="CH2"))
+  }
+}
+
+trimmed3 <- trimmed2[!trimmed2$subject %in% outliers$subj,]
+```
+
+
+```{r Magnitude comparison model}
+# Define function to calculate probabilities (based on traditional number Weber model with lapse parameter)
+prob <- function(w,g,r){
+  p <- pnorm((r-1)/(w*sqrt(1+r^2)))
+  pp <- (1-g)*p + g/2
+  return(pp)
+}
+
+# Define model
+probmodel <- function(subjectParams,trialParams){
+
+  # Unpack variables
+  kN.N      <- subjectParams[1] # weight on number during number task
+  kN.TSA    <- subjectParams[2] # weight on number during surface area task
+  kN.CH     <- subjectParams[3] # weight on number during convex hull task
+  kTSA.N    <- subjectParams[4] # weight on surface area during number task
+  kTSA.TSA  <- subjectParams[5] # weight on surface area during surface area task
+  kTSA.CH   <- subjectParams[6] # weight on surface area during convex hull task
+  kCH.N     <- subjectParams[7] # weight on convex hull during number task
+  kCH.TSA   <- subjectParams[8] # weight on convex hull during surface area task
+  kCH.CH    <- subjectParams[9] # weight on convex hull during convex hull task
+  wN        <- subjectParams[10] # number Weber fraction
+  wTSA      <- subjectParams[11] # surface area Weber fraction
+  wCH       <- subjectParams[12] # convex hull Weber fraction
+  g         <- subjectParams[13] # universal lapse parameter
+  rN        <- trialParams[[1]] # number ratio
+  rTSA      <- trialParams[[2]] # surface area ratio
+  rCH       <- trialParams[[3]] # convex hull ratio
+  l         <- trialParams[[4]] # does correct response on number agree with correct response on target feature? (1 yes, 0 no)
+  i         <- trialParams[[5]] # does correct response on surface area agree with correct response on target feature? (1 yes, 0 no)
+  j         <- trialParams[[6]] # does correct response on convex hull agree with correct response on target feature (1 yes, 0 no)
+  taskN     <- trialParams[[7]] # is this a trial in the number task? (1 yes, 0 no)
+  taskTSA   <- trialParams[[8]] # is this a trial in the surface area task? (1 yes, 0 no)
+  taskCH    <- trialParams[[9]] # is this a trial in the convex hull task? (1 yes, 0 no)
+
+  # Define probabilities
+  probN <- prob(wN,g,rN) # probability that subj would respond correctly if performing the number task on this trial
+  probTSA <- prob(wTSA,g,rTSA) # probability that subj would respond correctly if performing the surface area task on this trial
+  probCH <- prob(wCH,g,rCH) # probability that subj would respond correctly if performing the convex hull task on this trial
+  
+  # Define sub-expressions
+  term11 <- kN.N*taskN + kN.TSA*taskTSA + kN.CH*taskCH # determines which weight is appropriate for this trial
+  term12 <- l*probN + (1-l)*(1-probN) # determines whether probability is added or subtracted, depending on feature agreement
+  term21 <- kTSA.N*taskN + kTSA.TSA*taskTSA + kTSA.CH*taskCH # determines which weight is appropriate for this trial
+  term22 <- i*probTSA + (1-i)*(1-probTSA) # determines whether probability is added or subtracted, depending on feature agreement
+  term31 <- kCH.N*taskN + kCH.TSA*taskTSA + kCH.CH*taskCH # determines which weight is appropriate for this trial
+  term32 <- j*probCH + (1-j)*(1-probCH) # determines whether probability is added or subtracted, depending on feature agreement
+  
+  # Put it all together
+  y <- term11*term12 + term21*term22 + term31*term32 #sum total probability of correct response
+  return(y)
+}
+
+# Create objective function
+NLL <- function(subjectParams,trialParams,outcomes) {
+  p <- probmodel(subjectParams,trialParams)
+  probofobs <- log(p)*outcomes + log(1-p)*(1-outcomes)
+  negativeloglikelihood <- -sum(probofobs)
+  return(negativeloglikelihood)
+}
+
+# Enforce that weights sum to 1
+constraint <- function(subjectParams,trialParams,outcomes){
+  constraintvector <- rep(NULL,6)
+  constraintvector[1] <- sum(subjectParams[c(1,4,7)]) # kN.N + kTSA.N + kCH.N = 1
+  constraintvector[2] <- sum(subjectParams[c(2,5,8)]) # kN.TSA + kTSA.TSA + kCH.TSA = 1
+  constraintvector[3] <- sum(subjectParams[c(3,6,9)]) # kN.CH + kTSA.CH + kCH.H = 1
+  return(constraintvector)
+}
+constraintvals <- c(1,1,1)
+
+# Set lower and upper bounds
+numParam <- 13
+lb <- rep(0,numParam) # all parameters minimum = 0
+ub <- c(rep(1,9),rep(3,3),1) # weights max = 1, Weber fractions max = 3
+
+# Set initial guesses
+subjectParams <- rep(1/3,numParam) # initiate all parameters at 1/3
+```
+
+
+Model Fitting
+
+```{r Fitting each subject collapsed over time}
+fits.collapsed <- data.frame()
+
+for (i in unique(trimmed3$subject)){
+  thisSubj <- trimmed3[trimmed3$subject==i,]
+  trialParams <- thisSubj[,c(3:11)] # only the variables used in model fitting
+  outcomes <- thisSubj$correct  # accuracy
+  
+  # Fit the model
+  pest <- solnp(subjectParams,NLL,eqfun = constraint,eqB=constraintvals,ineqfun=NULL,ineqLB=NULL,ineqUB=NULL,LB=lb,UB=ub,
+                control=NULL,trialParams,outcomes)
+  
+  # Save fit results to dataframe
+  fits.collapsed <- rbind(fits.collapsed, data.frame(subj=i, trials=nrow(thisSubj),
+                                 kN.N = pest$pars[1], kN.TSA=pest$pars[2], kN.CH=pest$pars[3],
+                                 kTSA.N = pest$pars[4], kTSA.TSA = pest$pars[5], kTSA.CH = pest$pars[6],
+                                 kCH.N = pest$pars[7], kCH.TSA = pest$pars[8], kCH.CH = pest$pars[9],
+                                 wN = pest$pars[10], wTSA = pest$pars[11], wCH = pest$pars[12], 
+                                 g = pest$pars[13]))
+}
+
+```
+
+
+```{r Difference in acuity by task}
+# Create a dataframe with only fitted Weber fractions
+justWs <- fits.collapsed[c(1,12:14)]
+wsLong <- gather(justWs, task, w, wN:wCH, factor_key=TRUE)
+
+# Violin plot
+ggplot(wsLong, aes(x = task, y=w, colour=task, fill=task))+
+  theme_classic(base_size=20)+
+  theme(aspect=1, legend.position="none")+
+  labs(x="Feature", y="Weber Fraction")+
+  geom_violin(alpha = .3)+
+  geom_dotplot(binaxis='y', stackdir='center', dotsize=.5,alpha = .5)+
+  scale_x_discrete(labels=c("Number", "Surface\nArea", "Convex\nHull"))+
+  scale_fill_manual(values = c("#242ED6","#EC226C","#2CE6AE"))+
+  scale_colour_manual(values = c("#242ED6","#EC226C","#2CE6AE"))
+```
+```{r Difference in target feature weighting by task}
+# Create a dataframe with only fitted target feature weights
+justBs <- fits.collapsed[c(1,3,7,11)]
+bsLong <- gather(justBs, task, b, kN.N:kCH.CH, factor_key=TRUE)
+
+# Violin plot
+ggplot(bsLong, aes(x = task, y=b, colour=task, fill=task))+
+  theme_classic(base_size=20)+
+  theme(aspect=1, legend.position="none")+
+  labs(x="Feature", y="Target feature weighting")+
+  geom_violin(alpha = .3)+
+  geom_dotplot(binaxis='y', stackdir='center', dotsize=.5,alpha = .5)+
+  scale_x_discrete(labels=c("Number", "Surface\nArea", "Convex\nHull"))+
+  scale_fill_manual(values = c("#242ED6","#EC226C","#2CE6AE"))+
+  scale_colour_manual(values = c("#242ED6","#EC226C","#2CE6AE"))
+```
+
+
+```{r Fitting each subject separately for T1 and T2}
+# new dataframe
+fits.split <- data.frame()
+for (sub in unique(trimmed3$subject)){
+  thisSubj <- trimmed3[trimmed3$subj==sub,]
+  if (length(unique(thisSubj$time)) == 2){ # if the subject participated at both time points
+    for (time in unique(thisSubj$time)){
+      thisTime <- thisSubj[thisSubj$time==time,]
+      trialParams <- thisTime[,c(3:11)] # only the variables used in model fitting
+      outcomes <- thisTime$correct # accuracy
+      
+      # Fit the model
+      pest <- solnp(subjectParams,NLL,eqfun = constraint,eqB=constraintvals,ineqfun=NULL,ineqLB=NULL,ineqUB=NULL,LB=lb,UB=ub,
+                    control=NULL,trialParams,outcomes)
+      
+      # Save to dataframe
+      fits.split <- rbind(fits.split, data.frame(subj=sub, trials=nrow(thisSubj), time=time,
+                                     kN.N = pest$pars[1], kN.TSA=pest$pars[2], kN.CH=pest$pars[3],
+                                     kTSA.N = pest$pars[4], kTSA.TSA = pest$pars[5], kTSA.CH = pest$pars[6],
+                                     kCH.N = pest$pars[7], kCH.TSA = pest$pars[8], kCH.CH = pest$pars[9],
+                                     wN = pest$pars[10], wTSA = pest$pars[11], wCH = pest$pars[12],
+                                     g = pest$pars[13]))
+    }
+  }
+}
+```
+
+
+```{r Difference in acuity by task and time}
+justWs2 <- fits.split[c(1,3,13:15)]
+wsLong2 <- gather(justWs2, task, w, wN:wCH, factor_key=TRUE)
+wsLong2$timeF <- as.factor(wsLong2$time)
+
+ggplot(wsLong2, aes(x = task, y=w, colour=timeF, fill=timeF))+
+  theme_classic(base_size=20)+
+  theme(aspect=1)+
+  labs(x="Feature", y="Weber Fraction", fill = "Session", color = "Session")+
+  geom_violin(alpha = .3)+
+  geom_dotplot(binaxis='y', stackdir='center', dotsize=.5,alpha = .5, position=position_dodge(.9))+
+  scale_x_discrete(labels=c("Number", "Surface\nArea", "Convex\nHull"))
+```
+
+```{r Difference in target feature weighting by task and time}
+# Create a dataframe with only fitted target feature weights
+justBs2 <- fits.split[c(1,3,4,8,12)]
+bsLong2 <- gather(justBs2, task, b, kN.N:kCH.CH, factor_key=TRUE)
+bsLong2$timeF <- as.factor(bsLong2$time)
+
+# Violin plot
+ggplot(bsLong2, aes(x = task, y=b, colour=timeF, fill=timeF))+
+  theme_classic(base_size=20)+
+  theme(aspect=1, legend.position="none")+
+  labs(x="Feature", y="Target feature weighting", fill = "Session", color = "Session")+
+  geom_violin(alpha = .3)+
+  geom_dotplot(binaxis='y', stackdir='center', dotsize=.5,alpha = .5, position=position_dodge(.9))+
+  scale_x_discrete(labels=c("Number", "Surface\nArea", "Convex\nHull"))
+```
+
