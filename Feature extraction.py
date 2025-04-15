@@ -6,8 +6,8 @@ import csv
 import os
 
 #Directories
-imageDirectory = '/Users/emilysanford/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Johns Hopkins/Research/Test Re-Test/Submission 2/Github materials/Stimuli/' # Change this to the path where the images are saved
-fileName = "/Users/emilysanford/Library/Mobile Documents/com~apple~CloudDocs/Desktop/Johns Hopkins/Research/Test Re-Test/Submission 2/Github materials/stimulus features.csv" # Name of file where feature information will be saved
+imageDirectory = '/Stimuli/' # Change this to the path where the images are saved
+fileName = "stimulus features.csv" # Name of file where feature information will be saved
 
 # Define colors
 background = (128,128,128) # gray
